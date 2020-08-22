@@ -76,7 +76,7 @@ impl Slots {
     /// Get a reference to the value at the given slot.
     pub(super) fn get(&self, key: usize, generation: usize) -> Option<&Holder> {
         match self.entries.get(key) {
-            Some(Entry::Occupied(holder)) if holder.generation == generation => Some(holder),
+            Some(Entry::Occupied(holder)) if holder.header.generation == generation => Some(holder),
             _ => None,
         }
     }
@@ -91,7 +91,7 @@ impl Slots {
 
         match prev {
             Entry::Occupied(holder) => {
-                if holder.generation == generation {
+                if holder.header.generation == generation {
                     self.len -= 1;
                     self.next = key;
                     Some(holder)

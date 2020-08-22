@@ -16,17 +16,20 @@ use std::cell::UnsafeCell;
 use std::fmt;
 use std::marker;
 use std::mem;
+use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
 
 mod access;
 mod inst;
+mod ref_count;
 mod slots;
 
 use self::access::Access;
 pub use self::access::{Mut, RawMutGuard, RawRefGuard, Ref};
 use self::access::{RawMut, RawRef};
 pub use self::inst::{Inst, Panic};
+use self::ref_count::RefCount;
 use self::slots::Slots;
 
 /// A type-erased rust number.
@@ -675,12 +678,27 @@ macro_rules! assign_ops {
     }
 }
 
-/// The holder of an external value.
-///
-/// This behaves a lot like RefCell, but with some extra tricks up its sleeve,
-/// like the ability to construct raw access guards. See [Ref] and [Mut].
+type DropFn = unsafe fn(&mut Vm) -> Result<(), VmError>;
+
+struct HolderVtable {
+    drop: DropFn,
+}
+
+impl fmt::Debug for HolderVtable {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "HolderVtable({:p})", self)
+    }
+}
+
+static EMPTY_HOLDER_VTABLE: HolderVtable = HolderVtable { drop: noop_drop };
+
+unsafe fn noop_drop(_vm: &mut Vm) -> Result<(), VmError> {
+    Ok(())
+}
+
+/// The boxed header of a holder.
 #[derive(Debug)]
-struct Holder {
+pub(self) struct Header {
     /// The generation this holder was created for.
     ///
     /// Slots referencing this holder encoder the generation, so a slot will
@@ -695,10 +713,55 @@ struct Holder {
     /// will use (unsafe) pointers to it, and we can't have it move.
     /// Other safety guarantees of the virtual machinea asserts that the holder
     /// is not deallocates as well.
-    access: Box<Access>,
+    access: Access,
+    /// The reference count of the value.
+    ref_count: RefCount,
+    /// vtable used to implement cleanup operations.
+    holder_vtable: &'static HolderVtable,
+}
+
+impl Header {
+    /// Construct a new header with the given generation.
+    const fn with_generation(generation: usize, holder_vtable: &'static HolderVtable) -> Self {
+        Self {
+            generation,
+            access: Access::new(),
+            ref_count: RefCount::new(1),
+            holder_vtable,
+        }
+    }
+
+    /// Perform a header drop.
+    fn header_drop(self: Pin<&mut Self>, vm: &mut Vm) -> Result<(), VmError> {
+        if self.ref_count.dec() {
+            // Safety: safety of vtable call is guaranteed by how the header can be
+            // constructed. I.e. construction is only performed internally in `Vm`.
+            unsafe { (self.holder_vtable.drop)(vm)? }
+        }
+
+        Ok(())
+    }
+}
+
+/// The holder of an external value.
+///
+/// This behaves a lot like RefCell, but with some extra tricks up its sleeve,
+/// like the ability to construct raw access guards. See [Ref] and [Mut].
+#[derive(Debug)]
+struct Holder {
+    /// Header of a held value.
+    header: Pin<Box<Header>>,
     /// The value being held. Guarded by the `access` field to determine if it
     /// can be access shared or exclusively.
     value: UnsafeCell<Any>,
+}
+
+impl Holder {
+    /// Perform a header drop.
+    fn holder_drop(mut self, vm: &mut Vm) -> Result<Any, VmError> {
+        Pin::new(&mut *self.header).header_drop(vm)?;
+        Ok(self.value.into_inner())
+    }
 }
 
 /// A call frame.
@@ -1328,13 +1391,17 @@ impl Vm {
         Ok(false)
     }
 
-    fn internal_allocate<T>(&mut self, generation: usize, value: T) -> usize
+    fn internal_allocate<T>(
+        &mut self,
+        generation: usize,
+        value: T,
+        holder_vtable: &'static HolderVtable,
+    ) -> usize
     where
         T: any::Any,
     {
         self.slots.insert(Holder {
-            generation,
-            access: Box::new(Access::new()),
+            header: Box::pin(Header::with_generation(generation, holder_vtable)),
             value: UnsafeCell::new(Any::new(value)),
         })
     }
@@ -1354,7 +1421,10 @@ impl Vm {
         T: any::Any,
     {
         let generation = self.generation();
-        Slot::new(generation, self.internal_allocate(generation, value))
+        Slot::new(
+            generation,
+            self.internal_allocate(generation, value, &EMPTY_HOLDER_VTABLE),
+        )
     }
 
     /// Allocate and insert an external and return its reference.
@@ -1385,8 +1455,7 @@ impl Vm {
         let any = Any::from_ptr(value);
 
         let index = self.slots.insert(Holder {
-            generation,
-            access: Box::new(Access::new()),
+            header: Box::pin(Header::with_generation(generation, &EMPTY_HOLDER_VTABLE)),
             value: UnsafeCell::new(any),
         });
 
@@ -1410,8 +1479,7 @@ impl Vm {
         let any = Any::from_mut_ptr(value);
 
         let index = self.slots.insert(Holder {
-            generation,
-            access: Box::new(Access::new()),
+            header: Box::pin(Header::with_generation(generation, &EMPTY_HOLDER_VTABLE)),
             value: UnsafeCell::new(any),
         });
 
@@ -1526,7 +1594,7 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.shared(slot)?;
+        holder.header.access.shared(slot)?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1539,7 +1607,7 @@ impl Vm {
 
                     // NB: Immediately unshare because the cast failed and we
                     // won't be maintaining access to the type.
-                    holder.access.release_shared();
+                    holder.header.access.release_shared();
 
                     return Err(VmError::UnexpectedSlotType {
                         expected: any::type_name::<T>(),
@@ -1552,7 +1620,7 @@ impl Vm {
                 raw: RawRef {
                     value: value as *const T,
                     guard: RawRefGuard {
-                        access: &*holder.access,
+                        access: &holder.header.access,
                     },
                 },
                 _marker: marker::PhantomData,
@@ -1574,7 +1642,7 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.exclusive(slot)?;
+        holder.header.access.exclusive(slot)?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1587,7 +1655,7 @@ impl Vm {
 
                     // NB: Immediately unshare because the cast failed and we
                     // won't be maintaining access to the type.
-                    holder.access.release_exclusive();
+                    holder.header.access.release_exclusive();
 
                     return Err(VmError::UnexpectedSlotType {
                         expected: any::type_name::<T>(),
@@ -1600,7 +1668,7 @@ impl Vm {
                 raw: RawMut {
                     value: value as *mut T,
                     guard: RawMutGuard {
-                        access: &*holder.access,
+                        access: &holder.header.access,
                     },
                 },
                 _marker: marker::PhantomData,
@@ -1617,7 +1685,7 @@ impl Vm {
 
         // NB: we don't need a guard here since we're only using the reference
         // for the duration of this function.
-        holder.access.test_shared(slot)?;
+        holder.header.access.test_shared(slot)?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1675,7 +1743,9 @@ impl Vm {
             }
         };
 
-        match Self::take_value(holder.value.into_inner()) {
+        let value = holder.holder_drop(self)?;
+
+        match Self::take_value(value) {
             Ok(value) => Ok(value),
             Err(value) => Err(VmError::UnexpectedSlotType {
                 expected: any::type_name::<T>(),
@@ -1693,7 +1763,7 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.test_shared(slot)?;
+        holder.header.access.test_shared(slot)?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1709,7 +1779,7 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.shared(slot)?;
+        holder.header.access.shared(slot)?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1718,7 +1788,7 @@ impl Vm {
             raw: RawRef {
                 value: holder.value.get(),
                 guard: RawRefGuard {
-                    access: &*holder.access,
+                    access: &holder.header.access,
                 },
             },
             _marker: marker::PhantomData,
@@ -1734,10 +1804,8 @@ impl Vm {
             }
         };
 
-        // Safety: We have the necessary level of ownership to guarantee that
-        // the reference cast is safe, and we wrap the return value in a
-        // guard which ensures the needed access level.
-        Ok(holder.value.into_inner())
+        let value = holder.holder_drop(self)?;
+        Ok(value)
     }
 
     /// Access the type name of the slot.

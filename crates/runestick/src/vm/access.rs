@@ -10,7 +10,7 @@ pub(super) struct Access(Cell<isize>);
 
 impl Access {
     /// Construct a new default access.
-    pub const fn new() -> Self {
+    pub(super) const fn new() -> Self {
         Self(Cell::new(0))
     }
 
