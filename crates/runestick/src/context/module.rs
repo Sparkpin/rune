@@ -561,7 +561,7 @@ macro_rules! impl_register {
                 // when we return below.
                 #[allow(unused)]
                 let ret = unsafe {
-                    impl_register!{@unsafe-vars vm, $count, $($ty, $var, $num,)*}
+                    impl_register!{@unsafe-vars $count, $($ty, $var, $num,)*}
                     tls::inject_vm(vm, || self($(<$ty>::to_arg($var.0),)*))
                 };
 
@@ -597,20 +597,12 @@ macro_rules! impl_register {
                 // being polled.
                 let ret = unsafe {
                     let future: Box<dyn future::Future<Output = Result<(), VmError>>> = Box::new(async move {
-                        #[allow(unused)]
-                        let ($($var,)*) = tls::with_vm(|vm| {
-                            impl_register!{@unsafe-vars vm, $count, $($ty, $var, $num,)*}
-                            Ok::<_, VmError>(($($var,)*))
-                        })?;
+                        impl_register!{@unsafe-vars $count, $($ty, $var, $num,)*}
 
                         let output = self($(<$ty>::to_arg($var.0),)*).await;
 
-                        tls::with_vm(|vm| {
-                            let value = output.to_value(vm)?;
-                            vm.push(value);
-                            Ok::<_, VmError>(())
-                        })?;
-
+                        let value = output.to_value()?;
+                        tls::with_vm(move |vm| vm.push(value));
                         Ok(())
                     });
 
@@ -657,7 +649,7 @@ macro_rules! impl_register {
                 // when we return below.
                 #[allow(unused)]
                 let ret = unsafe {
-                    impl_register!{@unsafe-inst-vars inst, vm, $count, $($ty, $var, $num,)*}
+                    impl_register!{@unsafe-inst-vars inst, $count, $($ty, $var, $num,)*}
                     tls::inject_vm(vm, || self(Instance::to_arg(inst.0), $(<$ty>::to_arg($var.0),)*))
                 };
 
@@ -702,19 +694,12 @@ macro_rules! impl_register {
                 #[allow(unused)]
                 let ret = unsafe {
                     let future: Box<dyn future::Future<Output = Result<(), VmError>>> = Box::new(async move {
-                        let (inst, $($var,)*) = tls::with_vm(|vm| {
-                            impl_register!{@unsafe-inst-vars inst, vm, $count, $($ty, $var, $num,)*}
-                            Ok((inst, $($var,)*))
-                        })?;
+                        impl_register!{@unsafe-inst-vars inst, $count, $($ty, $var, $num,)*}
 
                         let output = self(Instance::to_arg(inst.0), $(<$ty>::to_arg($var.0),)*).await;
 
-                        tls::with_vm(|vm| {
-                            let value = output.to_value(vm)?;
-                            vm.push(value);
-                            Ok::<_, VmError>(())
-                        })?;
-
+                        let value = output.to_value()?;
+                        tls::with_vm(|vm| vm.push(value));
                         Ok(())
                     });
 
@@ -728,7 +713,7 @@ macro_rules! impl_register {
     };
 
     (@return $vm:ident, $ret:ident, $ty:ty) => {
-        let $ret = match $ret.to_value($vm) {
+        let $ret = match $ret.to_value() {
             Ok($ret) => $ret,
             Err(error) => {
                 return Err(VmError::ReturnConversionError {
@@ -742,17 +727,14 @@ macro_rules! impl_register {
     };
 
     // Expand to function variable bindings.
-    (@unsafe-vars $vm:expr, $count:expr, $($ty:ty, $var:ident, $num:expr,)*) => {
+    (@unsafe-vars $count:expr, $($ty:ty, $var:ident, $num:expr,)*) => {
         $(
-            let $var = match <$ty>::unsafe_from_value(&$var, $vm) {
+            let $var = match <$ty>::unsafe_from_value($var) {
                 Ok(v) => v,
                 Err(error) => {
-                    let ty = $var.type_info($vm)?;
-
                     return Err(VmError::ArgumentConversionError {
                         error: Box::new(error),
                         arg: $count - $num,
-                        from: ty,
                         to: type_name::<$ty>(),
                     });
                 }
@@ -761,31 +743,25 @@ macro_rules! impl_register {
     };
 
     // Expand to instance variable bindings.
-    (@unsafe-inst-vars $inst:ident, $vm:expr, $count:expr, $($ty:ty, $var:ident, $num:expr,)*) => {
-        let $inst = match Instance::unsafe_from_value(&$inst, $vm) {
+    (@unsafe-inst-vars $inst:ident, $count:expr, $($ty:ty, $var:ident, $num:expr,)*) => {
+        let $inst = match Instance::unsafe_from_value($inst) {
             Ok(v) => v,
             Err(error) => {
-                let ty = $inst.type_info($vm)?;
-
                 return Err(VmError::ArgumentConversionError {
                     error: Box::new(error),
                     arg: 0,
-                    from: ty,
                     to: type_name::<Instance>()
                 });
             }
         };
 
         $(
-            let $var = match <$ty>::unsafe_from_value(&$var, $vm) {
+            let $var = match <$ty>::unsafe_from_value($var) {
                 Ok(v) => v,
                 Err(error) => {
-                    let ty = $var.type_info($vm)?;
-
                     return Err(VmError::ArgumentConversionError {
                         error: Box::new(error),
                         arg: 1 + $count - $num,
-                        from: ty,
                         to: type_name::<$ty>()
                     });
                 }

@@ -36,7 +36,7 @@ fn test_custom_functions() {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Thing(usize);
 
 runestick::decl_external!(Thing);
@@ -45,10 +45,10 @@ runestick::decl_external!(Thing);
 fn test_passed_in_reference() {
     let mut module = runestick::Module::default();
     module
-        .function(&["test"], |mut a: Thing, b: &mut Thing| {
+        .function(&["test"], |mut a: &mut Thing, b: &mut Thing| {
             a.0 += 10;
             b.0 -= 10;
-            a
+            a.clone()
         })
         .unwrap();
 

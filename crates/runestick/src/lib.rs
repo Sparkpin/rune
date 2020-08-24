@@ -54,7 +54,7 @@ mod shared;
 pub mod tls;
 pub mod unit;
 
-pub use crate::access::{Mut, NotAccessibleMut, NotAccessibleRef, RawMutGuard, RawRefGuard, Ref};
+pub use crate::access::{Mut, NotAccessibleMut, NotAccessibleRef, Ref};
 pub use crate::any::Any;
 pub use crate::bytes::Bytes;
 pub use crate::context::{Context, ContextError, Item, Meta, MetaTuple, MetaType, Module};
@@ -67,12 +67,9 @@ pub use crate::hash::Hash;
 pub use crate::reflection::{
     FromValue, IntoArgs, ReflectValueType, ToValue, UnsafeFromValue, UnsafeToValue,
 };
-pub use crate::shared::Shared;
+pub use crate::shared::{RawStrongMutGuard, RawStrongRefGuard, Shared, StrongMut, StrongRef};
 pub use crate::unit::{CompilationUnit, CompilationUnitError, Span};
-pub use crate::value::{
-    Object, OwnedTypedObject, OwnedTypedTuple, OwnedValue, Slot, TypedTuple, TypedTupleRef, Value,
-    ValueRef, ValueType, ValueTypeInfo, VecTuple,
-};
+pub use crate::value::{Object, TypedTuple, Value, ValueType, ValueTypeInfo, VecTuple};
 pub use crate::vm::{Inst, Panic, Task, Vm, VmError};
 
 mod collections {

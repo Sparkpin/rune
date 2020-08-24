@@ -217,7 +217,7 @@ async fn main() -> Result<()> {
         println!("---");
     }
 
-    let mut task: runestick::Task<runestick::OwnedValue> =
+    let mut task: runestick::Task<runestick::Value> =
         runtime.call_function(file_id, &["main"], ())?;
     let last = std::time::Instant::now();
 
@@ -269,7 +269,7 @@ async fn main() -> Result<()> {
     if dump_vm {
         println!("# stack dump after completion");
 
-        for (n, (_, value)) in task.vm().iter_stack_debug().enumerate() {
+        for (n, value) in task.vm().iter_stack_debug().enumerate() {
             println!("{} = {:?}", n, value);
         }
 
@@ -339,7 +339,7 @@ where
         if dump_vm {
             writeln!(out, "# stack dump")?;
 
-            for (n, (_, value)) in task.vm().iter_stack_debug().enumerate() {
+            for (n, value) in task.vm().iter_stack_debug().enumerate() {
                 writeln!(out, "{} = {:?}", n, value)?;
             }
 

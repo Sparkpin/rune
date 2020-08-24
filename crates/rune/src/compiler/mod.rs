@@ -703,7 +703,7 @@ impl<'a, 'm> Compiler<'a, 'm> {
             match c {
                 ast::TemplateComponent::String(string) => {
                     let slot = self.unit.new_static_string(&string)?;
-                    self.asm.push(Inst::StaticString { slot }, span);
+                    self.asm.push(Inst::String { slot }, span);
                     self.scopes.last_mut(span)?.decl_anon(span);
                 }
                 ast::TemplateComponent::Expr(expr) => {
