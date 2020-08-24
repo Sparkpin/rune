@@ -146,7 +146,7 @@ impl FromValue for OwnedValue {
 impl FromValue for Any {
     fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
         let slot = value.into_external(vm)?;
-        vm.external_take_dyn(slot)
+        vm.slot_take_dyn(slot)
     }
 }
 

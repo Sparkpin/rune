@@ -62,9 +62,7 @@ impl ser::Serialize for Value {
                 serializer.end()
             }),
             Value::Tuple(slot) => tls::with_vm(|vm| {
-                let tuple = vm
-                    .external_ref::<Box<[Value]>>(slot)
-                    .map_err(ser::Error::custom)?;
+                let tuple = vm.tuple_ref(slot).map_err(ser::Error::custom)?;
                 let mut serializer = serializer.serialize_seq(Some(tuple.len()))?;
 
                 for value in tuple.iter() {

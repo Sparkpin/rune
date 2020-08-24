@@ -1,10 +1,10 @@
+use crate::access::Ref;
 use crate::any::Any;
 use crate::bytes::Bytes;
 use crate::collections::HashMap;
 use crate::future::Future;
 use crate::hash::Hash;
 use crate::value::Object;
-use crate::vm::Ref;
 
 /// A typed tuple reference.
 #[derive(Debug)]

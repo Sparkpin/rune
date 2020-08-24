@@ -1,6 +1,7 @@
+use crate::access::{Mut, RawMutGuard, RawRefGuard, Ref};
 use crate::reflection::{FromValue, ReflectValueType, ToValue, UnsafeFromValue};
 use crate::value::{Value, ValueType, ValueTypeInfo};
-use crate::vm::{Mut, RawMutGuard, RawRefGuard, Ref, Vm, VmError};
+use crate::vm::{Vm, VmError};
 
 impl<T> ReflectValueType for Vec<T> {
     type Owned = Vec<T>;

@@ -19,15 +19,12 @@ use std::mem;
 use std::sync::Arc;
 use thiserror::Error;
 
-mod access;
 mod inst;
 mod slots;
 
-use self::access::Access;
-pub use self::access::{Mut, RawMutGuard, RawRefGuard, Ref};
-use self::access::{RawMut, RawRef};
 pub use self::inst::{Inst, Panic};
 use self::slots::Slots;
+use crate::access::{Access, Mut, RawMut, RawMutGuard, RawRef, RawRefGuard, Ref};
 
 /// A type-erased rust number.
 #[derive(Debug, Clone, Copy)]
@@ -749,10 +746,10 @@ macro_rules! call_fn {
 ///
 /// This provides typed convenience functions over the typical:
 /// * [slot_allocate]
-/// * [external_ref]
-/// * [external_mut]
-/// * [external_take]
-/// * [external_clone]
+/// * [slot_ref]
+/// * [slot_mut]
+/// * [slot_take]
+/// * [slot_clone]
 macro_rules! impl_slot_functions {
     (
         $ty:ty,
@@ -770,23 +767,23 @@ macro_rules! impl_slot_functions {
 
         /// Get a reference of the value at the given slot.
         pub fn $ref_fn(&self, slot: Slot) -> Result<Ref<'_, $ty>, VmError> {
-            self.external_ref::<$ty>(slot)
+            self.slot_ref::<$ty>(slot)
         }
 
         /// Get a reference of the value at the given slot.
         pub fn $mut_fn(&self, slot: Slot) -> Result<Mut<'_, $ty>, VmError> {
-            self.external_mut::<$ty>(slot)
+            self.slot_mut::<$ty>(slot)
         }
 
         /// Take the value at the given slot.
         pub fn $take_fn(&mut self, slot: Slot) -> Result<$ty, VmError> {
-            self.external_take::<$ty>(slot)
+            self.slot_take::<$ty>(slot)
         }
 
         $(
             /// Get a cloned value from the given slot.
             pub fn $clone_fn(&self, slot: Slot) -> Result<$ty, VmError> {
-                self.external_clone::<$ty>(slot)
+                self.slot_clone::<$ty>(slot)
             }
         )*
     };
@@ -1210,7 +1207,7 @@ impl Vm {
         let value = self.stack.at_offset(offset)?;
 
         if let Some(slot) = value.into_slot() {
-            self.external_take_dyn(slot)?;
+            self.slot_take_dyn(slot)?;
         }
 
         Ok(())
@@ -1517,7 +1514,7 @@ impl Vm {
 
     /// Get a reference of the external value of the given type and the given
     /// slot.
-    pub fn external_ref<T>(&self, slot: Slot) -> Result<Ref<'_, T>, VmError>
+    pub fn slot_ref<T>(&self, slot: Slot) -> Result<Ref<'_, T>, VmError>
     where
         T: any::Any,
     {
@@ -1526,7 +1523,10 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.shared(slot)?;
+        holder
+            .access
+            .shared()
+            .map_err(|_| VmError::SlotInaccessibleShared { slot })?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1565,7 +1565,7 @@ impl Vm {
     ///
     /// Mark the given value as mutably used, preventing it from being used
     /// again.
-    pub fn external_mut<T>(&self, slot: Slot) -> Result<Mut<'_, T>, VmError>
+    pub fn slot_mut<T>(&self, slot: Slot) -> Result<Mut<'_, T>, VmError>
     where
         T: any::Any,
     {
@@ -1574,7 +1574,10 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.exclusive(slot)?;
+        holder
+            .access
+            .exclusive()
+            .map_err(|_| VmError::SlotInaccessibleExclusive { slot })?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1609,7 +1612,7 @@ impl Vm {
     }
 
     /// Get a clone of the given external.
-    pub fn external_clone<T: Clone + any::Any>(&self, slot: Slot) -> Result<T, VmError> {
+    pub fn slot_clone<T: Clone + any::Any>(&self, slot: Slot) -> Result<T, VmError> {
         let holder = self
             .slots
             .get(slot.into_usize(), slot.into_generation())
@@ -1617,7 +1620,10 @@ impl Vm {
 
         // NB: we don't need a guard here since we're only using the reference
         // for the duration of this function.
-        holder.access.test_shared(slot)?;
+        holder
+            .access
+            .test_shared()
+            .map_err(|_| VmError::SlotInaccessibleShared { slot })?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1660,7 +1666,7 @@ impl Vm {
     }
 
     /// Take an external value from the virtual machine by its slot.
-    pub fn external_take<T>(&mut self, slot: Slot) -> Result<T, VmError>
+    pub fn slot_take<T>(&mut self, slot: Slot) -> Result<T, VmError>
     where
         T: any::Any,
     {
@@ -1693,7 +1699,10 @@ impl Vm {
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.test_shared(slot)?;
+        holder
+            .access
+            .test_shared()
+            .map_err(|_| VmError::SlotInaccessibleShared { slot })?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1703,13 +1712,16 @@ impl Vm {
 
     /// Get a reference of the external value of the given type and the given
     /// slot.
-    pub fn external_ref_dyn(&self, slot: Slot) -> Result<Ref<'_, Any>, VmError> {
+    pub fn slot_ref_dyn(&self, slot: Slot) -> Result<Ref<'_, Any>, VmError> {
         let holder = self
             .slots
             .get(slot.into_usize(), slot.into_generation())
             .ok_or_else(|| VmError::SlotMissing { slot })?;
 
-        holder.access.shared(slot)?;
+        holder
+            .access
+            .shared()
+            .map_err(|_| VmError::SlotInaccessibleShared { slot })?;
 
         // Safety: We have the necessary level of ownership to guarantee that
         // the reference cast is safe, and we wrap the return value in a
@@ -1726,7 +1738,7 @@ impl Vm {
     }
 
     /// Take an external value by dyn, assuming you have exlusive access to it.
-    pub fn external_take_dyn(&mut self, slot: Slot) -> Result<Any, VmError> {
+    pub fn slot_take_dyn(&mut self, slot: Slot) -> Result<Any, VmError> {
         let holder = match self.slots.remove(slot.into_usize(), slot.into_generation()) {
             Some(holder) => holder,
             None => {
@@ -1774,14 +1786,14 @@ impl Vm {
                 let object = self.object_take(slot)?;
                 OwnedValue::Object(value_take_object(self, object)?)
             }
-            Value::External(slot) => OwnedValue::External(self.external_take_dyn(slot)?),
+            Value::External(slot) => OwnedValue::External(self.slot_take_dyn(slot)?),
             Value::Type(ty) => OwnedValue::Type(ty),
             Value::Future(slot) => {
-                let future = self.external_take(slot)?;
+                let future = self.slot_take(slot)?;
                 OwnedValue::Future(future)
             }
             Value::Option(slot) => {
-                let option = self.external_take(slot)?;
+                let option = self.slot_take(slot)?;
 
                 let option = match option {
                     Some(slot) => Some(Box::new(self.value_take(slot)?)),
@@ -1791,7 +1803,7 @@ impl Vm {
                 OwnedValue::Option(option)
             }
             Value::Result(slot) => {
-                let result = self.external_take(slot)?;
+                let result = self.slot_take(slot)?;
 
                 let result = match result {
                     Ok(slot) => Ok(Box::new(self.value_take(slot)?)),
@@ -1881,10 +1893,10 @@ impl Vm {
                 let object = self.object_ref(slot)?;
                 ValueRef::Object(self.value_object_ref(&*object)?)
             }
-            Value::External(slot) => ValueRef::External(self.external_ref_dyn(slot)?),
+            Value::External(slot) => ValueRef::External(self.slot_ref_dyn(slot)?),
             Value::Type(ty) => ValueRef::Type(ty),
             Value::Future(slot) => {
-                let future = self.external_ref(slot)?;
+                let future = self.slot_ref(slot)?;
                 ValueRef::Future(future)
             }
             Value::Option(slot) => {

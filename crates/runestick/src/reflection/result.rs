@@ -1,8 +1,9 @@
 //! Trait implementations for `Result` types.
 
+use crate::access::{RawRefGuard, Ref};
 use crate::reflection::{FromValue, ReflectValueType, ToValue, UnsafeFromValue};
 use crate::value::{Value, ValueType, ValueTypeInfo};
-use crate::vm::{RawRefGuard, Ref, Vm, VmError};
+use crate::vm::{Vm, VmError};
 
 impl<T, E> ReflectValueType for Result<T, E> {
     type Owned = Result<T, E>;

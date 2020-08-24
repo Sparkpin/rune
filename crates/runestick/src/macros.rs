@@ -17,7 +17,7 @@ macro_rules! decl_external {
                 vm: &mut $crate::Vm,
             ) -> Result<Self, $crate::VmError> {
                 let slot = value.into_external(vm)?;
-                vm.external_take::<$external>(slot)
+                vm.slot_take::<$external>(slot)
             }
         }
     };
@@ -97,7 +97,7 @@ macro_rules! decl_internal {
             ) -> Result<(Self::Output, Self::Guard), $crate::VmError> {
                 let slot = value.into_external(vm)?;
                 Ok($crate::Ref::unsafe_into_ref(
-                    vm.external_ref::<$external>(slot)?,
+                    vm.slot_ref::<$external>(slot)?,
                 ))
             }
 
@@ -116,7 +116,7 @@ macro_rules! decl_internal {
             ) -> Result<(Self::Output, Self::Guard), $crate::VmError> {
                 let slot = value.into_external(vm)?;
                 Ok($crate::Mut::unsafe_into_mut(
-                    vm.external_mut::<$external>(slot)?,
+                    vm.slot_mut::<$external>(slot)?,
                 ))
             }
 
