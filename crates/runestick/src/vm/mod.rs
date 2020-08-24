@@ -663,7 +663,7 @@ macro_rules! assign_ops {
                 };
 
                 $vm.push(rhs);
-                $vm.push(lhs);
+                $vm.push(lhs.clone());
                 handler($vm, 1)?;
                 $vm.pop()?;
                 lhs
@@ -813,26 +813,20 @@ impl Stack {
     }
 
     /// Peek the top of the stack.
-    fn peek(&mut self) -> Result<Value, VmError> {
-        self.stack
-            .last()
-            .copied()
-            .ok_or_else(|| VmError::StackEmpty)
+    fn peek(&mut self) -> Result<&Value, VmError> {
+        self.stack.last().ok_or_else(|| VmError::StackEmpty)
     }
 
     /// Get the last position on the stack.
-    pub fn last(&self) -> Result<Value, VmError> {
-        self.stack
-            .last()
-            .copied()
-            .ok_or_else(|| VmError::StackEmpty)
+    pub fn last(&self) -> Result<&Value, VmError> {
+        self.stack.last().ok_or_else(|| VmError::StackEmpty)
     }
 
     /// Access the value at the given frame offset.
-    fn at_offset(&self, offset: usize) -> Result<Value, VmError> {
+    fn at_offset(&self, offset: usize) -> Result<&Value, VmError> {
         self.stack_top
             .checked_add(offset)
-            .and_then(|n| self.stack.get(n).copied())
+            .and_then(|n| self.stack.get(n))
             .ok_or_else(|| VmError::StackOutOfBounds)
     }
 
@@ -888,8 +882,8 @@ impl Stack {
     }
 
     /// Iterate over the stack.
-    pub fn iter(&self) -> impl Iterator<Item = Value> + '_ {
-        self.stack.iter().copied()
+    pub fn iter(&self) -> impl Iterator<Item = &Value> + '_ {
+        self.stack.iter()
     }
 }
 
@@ -984,7 +978,7 @@ impl Vm {
     /// item.
     pub fn iter_stack_debug(
         &self,
-    ) -> impl Iterator<Item = (Value, Result<ValueRef<'_>, VmError>)> + '_ {
+    ) -> impl Iterator<Item = (&Value, Result<ValueRef<'_>, VmError>)> + '_ {
         let mut it = self.stack.iter();
 
         std::iter::from_fn(move || {
@@ -1197,7 +1191,7 @@ impl Vm {
     /// Copy a value from a position relative to the top of the stack, to the
     /// top of the stack.
     fn op_copy(&mut self, offset: usize) -> Result<(), VmError> {
-        let value = self.stack.at_offset(offset)?;
+        let value = self.stack.at_offset(offset)?.clone();
         self.stack.push(value);
         Ok(())
     }
@@ -1215,7 +1209,7 @@ impl Vm {
 
     /// Duplicate the value at the top of the stack.
     fn op_dup(&mut self) -> Result<(), VmError> {
-        let value = self.stack.last()?;
+        let value = self.stack.last()?.clone();
         self.stack.push(value);
         Ok(())
     }
@@ -1763,57 +1757,57 @@ impl Vm {
     }
 
     /// Convert a value reference into an owned value.
-    pub fn value_take(&mut self, value: Value) -> Result<OwnedValue, VmError> {
+    pub fn value_take(&mut self, value: &Value) -> Result<OwnedValue, VmError> {
         return Ok(match value {
             Value::Unit => OwnedValue::Unit,
-            Value::Bool(boolean) => OwnedValue::Bool(boolean),
-            Value::Byte(b) => OwnedValue::Byte(b),
-            Value::Char(c) => OwnedValue::Char(c),
-            Value::Integer(integer) => OwnedValue::Integer(integer),
-            Value::Float(float) => OwnedValue::Float(float),
-            Value::String(slot) => OwnedValue::String(self.string_take(slot)?),
-            Value::StaticString(slot) => OwnedValue::String(self.lookup_string(slot)?.to_owned()),
-            Value::Bytes(slot) => OwnedValue::Bytes(self.bytes_take(slot)?),
+            Value::Bool(boolean) => OwnedValue::Bool(*boolean),
+            Value::Byte(b) => OwnedValue::Byte(*b),
+            Value::Char(c) => OwnedValue::Char(*c),
+            Value::Integer(integer) => OwnedValue::Integer(*integer),
+            Value::Float(float) => OwnedValue::Float(*float),
+            Value::String(slot) => OwnedValue::String(self.string_take(*slot)?),
+            Value::StaticString(slot) => OwnedValue::String(self.lookup_string(*slot)?.to_owned()),
+            Value::Bytes(slot) => OwnedValue::Bytes(self.bytes_take(*slot)?),
             Value::Vec(slot) => {
-                let vec = self.vec_take(slot)?;
+                let vec = self.vec_take(*slot)?;
                 OwnedValue::Vec(value_take_vec(self, vec)?)
             }
             Value::Tuple(slot) => {
-                let tuple = self.tuple_take(slot)?;
+                let tuple = self.tuple_take(*slot)?;
                 OwnedValue::Tuple(value_take_tuple(self, &*tuple)?)
             }
             Value::Object(slot) => {
-                let object = self.object_take(slot)?;
+                let object = self.object_take(*slot)?;
                 OwnedValue::Object(value_take_object(self, object)?)
             }
-            Value::External(slot) => OwnedValue::External(self.slot_take_dyn(slot)?),
-            Value::Type(ty) => OwnedValue::Type(ty),
+            Value::External(slot) => OwnedValue::External(self.slot_take_dyn(*slot)?),
+            Value::Type(ty) => OwnedValue::Type(*ty),
             Value::Future(slot) => {
-                let future = self.slot_take(slot)?;
+                let future = self.slot_take(*slot)?;
                 OwnedValue::Future(future)
             }
             Value::Option(slot) => {
-                let option = self.slot_take(slot)?;
+                let option = self.slot_take(*slot)?;
 
                 let option = match option {
-                    Some(slot) => Some(Box::new(self.value_take(slot)?)),
+                    Some(slot) => Some(self.value_take(slot)?),
                     None => None,
                 };
 
-                OwnedValue::Option(option)
+                OwnedValue::Option(Box::new(option))
             }
             Value::Result(slot) => {
-                let result = self.slot_take(slot)?;
+                let result = self.slot_take(*slot)?;
 
                 let result = match result {
-                    Ok(slot) => Ok(Box::new(self.value_take(slot)?)),
-                    Err(slot) => Err(Box::new(self.value_take(slot)?)),
+                    Ok(slot) => Ok(self.value_take(slot)?),
+                    Err(slot) => Err(self.value_take(slot)?),
                 };
 
-                OwnedValue::Result(result)
+                OwnedValue::Result(Box::new(result))
             }
             Value::TypedObject(slot) => {
-                let typed_object = self.typed_object_take(slot)?;
+                let typed_object = self.typed_object_take(*slot)?;
                 let object = value_take_object(self, typed_object.object)?;
 
                 OwnedValue::TypedObject(OwnedTypedObject {
@@ -1822,7 +1816,7 @@ impl Vm {
                 })
             }
             Value::TypedTuple(slot) => {
-                let typed_tuple = self.typed_tuple_take(slot)?;
+                let typed_tuple = self.typed_tuple_take(*slot)?;
                 let tuple = value_take_tuple(self, &*typed_tuple.tuple)?;
 
                 OwnedValue::TypedTuple(OwnedTypedTuple {
@@ -1837,7 +1831,7 @@ impl Vm {
             let mut output = Vec::with_capacity(values.len());
 
             for value in values {
-                output.push(vm.value_take(value)?);
+                output.push(vm.value_take(&value)?);
             }
 
             Ok(output)
@@ -1848,7 +1842,7 @@ impl Vm {
             let mut output = Vec::with_capacity(values.len());
 
             for value in values.iter() {
-                output.push(vm.value_take(*value)?);
+                output.push(vm.value_take(value)?);
             }
 
             Ok(output.into_boxed_slice())
@@ -1862,7 +1856,7 @@ impl Vm {
             let mut output = HashMap::with_capacity(object.len());
 
             for (key, value) in object {
-                output.insert(key, vm.value_take(value)?);
+                output.insert(key, vm.value_take(&value)?);
             }
 
             Ok(output)
@@ -1870,39 +1864,39 @@ impl Vm {
     }
 
     /// Convert the given ptr into a type-erase ValueRef.
-    pub fn value_ref(&self, value: Value) -> Result<ValueRef<'_>, VmError> {
+    pub fn value_ref(&self, value: &Value) -> Result<ValueRef<'_>, VmError> {
         Ok(match value {
             Value::Unit => ValueRef::Unit,
-            Value::Bool(boolean) => ValueRef::Bool(boolean),
-            Value::Byte(b) => ValueRef::Byte(b),
-            Value::Char(c) => ValueRef::Char(c),
-            Value::Integer(integer) => ValueRef::Integer(integer),
-            Value::Float(float) => ValueRef::Float(float),
-            Value::String(slot) => ValueRef::String(self.string_ref(slot)?),
-            Value::StaticString(slot) => ValueRef::StaticString(self.lookup_string(slot)?),
-            Value::Bytes(slot) => ValueRef::Bytes(self.bytes_ref(slot)?),
+            Value::Bool(boolean) => ValueRef::Bool(*boolean),
+            Value::Byte(b) => ValueRef::Byte(*b),
+            Value::Char(c) => ValueRef::Char(*c),
+            Value::Integer(integer) => ValueRef::Integer(*integer),
+            Value::Float(float) => ValueRef::Float(*float),
+            Value::String(slot) => ValueRef::String(self.string_ref(*slot)?),
+            Value::StaticString(slot) => ValueRef::StaticString(self.lookup_string(*slot)?),
+            Value::Bytes(slot) => ValueRef::Bytes(self.bytes_ref(*slot)?),
             Value::Vec(slot) => {
-                let vec = self.vec_ref(slot)?;
+                let vec = self.vec_ref(*slot)?;
                 ValueRef::Vec(self.value_vec_ref(&*vec)?)
             }
             Value::Tuple(slot) => {
-                let tuple = self.tuple_ref(slot)?;
+                let tuple = self.tuple_ref(*slot)?;
                 ValueRef::Tuple(self.value_tuple_ref(&*tuple)?)
             }
             Value::Object(slot) => {
-                let object = self.object_ref(slot)?;
+                let object = self.object_ref(*slot)?;
                 ValueRef::Object(self.value_object_ref(&*object)?)
             }
-            Value::External(slot) => ValueRef::External(self.slot_ref_dyn(slot)?),
-            Value::Type(ty) => ValueRef::Type(ty),
+            Value::External(slot) => ValueRef::External(self.slot_ref_dyn(*slot)?),
+            Value::Type(ty) => ValueRef::Type(*ty),
             Value::Future(slot) => {
-                let future = self.slot_ref(slot)?;
+                let future = self.slot_ref(*slot)?;
                 ValueRef::Future(future)
             }
             Value::Option(slot) => {
-                let option = self.option_ref(slot)?;
+                let option = self.option_ref(*slot)?;
 
-                let option = match *option {
+                let option = match &*option {
                     Some(some) => Some(self.value_ref(some)?),
                     None => None,
                 };
@@ -1910,9 +1904,9 @@ impl Vm {
                 ValueRef::Option(Box::new(option))
             }
             Value::Result(slot) => {
-                let result = self.result_ref(slot)?;
+                let result = self.result_ref(*slot)?;
 
-                let result = match *result {
+                let result = match &*result {
                     Ok(ok) => Ok(self.value_ref(ok)?),
                     Err(err) => Err(self.value_ref(err)?),
                 };
@@ -1920,13 +1914,13 @@ impl Vm {
                 ValueRef::Result(Box::new(result))
             }
             Value::TypedTuple(slot) => {
-                let typed_tuple = self.typed_tuple_ref(slot)?;
+                let typed_tuple = self.typed_tuple_ref(*slot)?;
                 let typed_tuple =
                     self.value_ref_typed_tuple_ref(typed_tuple.ty, &*typed_tuple.tuple)?;
                 ValueRef::TypedTuple(typed_tuple)
             }
             Value::TypedObject(slot) => {
-                let typed_object = self.typed_object_ref(slot)?;
+                let typed_object = self.typed_object_ref(*slot)?;
                 let typed_object =
                     self.value_ref_typed_object_ref(typed_object.ty, &typed_object.object)?;
                 ValueRef::TypedObject(typed_object)
@@ -1938,7 +1932,7 @@ impl Vm {
     fn value_vec_ref<'vm>(&'vm self, values: &[Value]) -> Result<Vec<ValueRef<'vm>>, VmError> {
         let mut output = Vec::with_capacity(values.len());
 
-        for value in values.iter().copied() {
+        for value in values {
             output.push(self.value_ref(value)?);
         }
 
@@ -1949,7 +1943,7 @@ impl Vm {
     fn value_tuple_ref<'vm>(&'vm self, values: &[Value]) -> Result<Box<[ValueRef<'vm>]>, VmError> {
         let mut output = Vec::with_capacity(values.len());
 
-        for value in values.iter().copied() {
+        for value in values.iter() {
             output.push(self.value_ref(value)?);
         }
 
@@ -1963,8 +1957,8 @@ impl Vm {
     ) -> Result<HashMap<String, ValueRef<'vm>>, VmError> {
         let mut output = HashMap::with_capacity(object.len());
 
-        for (key, value) in object.iter() {
-            output.insert(key.to_owned(), self.value_ref(*value)?);
+        for (key, value) in object {
+            output.insert(key.to_owned(), self.value_ref(value)?);
         }
 
         Ok(output)
@@ -1978,7 +1972,7 @@ impl Vm {
     ) -> Result<TypedTupleRef<'vm>, VmError> {
         let mut output = Vec::with_capacity(tuple.len());
 
-        for value in tuple.iter().copied() {
+        for value in tuple.iter() {
             output.push(self.value_ref(value)?);
         }
 
@@ -1997,7 +1991,7 @@ impl Vm {
         let mut output = Object::with_capacity(object.len());
 
         for (key, value) in object {
-            output.insert(key.clone(), self.value_ref(*value)?);
+            output.insert(key.clone(), self.value_ref(value)?);
         }
 
         Ok(TypedObjectRef { ty, object: output })
@@ -2010,7 +2004,7 @@ impl Vm {
     {
         let value = self.stack.pop()?;
 
-        let value = match T::from_value(value, self) {
+        let value = match T::from_value(&value, self) {
             Ok(value) => value,
             Err(error) => {
                 let type_info = value.type_info(self)?;
@@ -2033,7 +2027,7 @@ impl Vm {
     ///
     /// Note: External types are compared by their slot, but should eventually
     /// use a dynamically resolve equality function.
-    fn value_ptr_eq(&self, a: Value, b: Value) -> Result<bool, VmError> {
+    fn value_ptr_eq(&self, a: &Value, b: &Value) -> Result<bool, VmError> {
         Ok(match (a, b) {
             (Value::Unit, Value::Unit) => true,
             (Value::Char(a), Value::Char(b)) => a == b,
@@ -2041,14 +2035,14 @@ impl Vm {
             (Value::Integer(a), Value::Integer(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Vec(a), Value::Vec(b)) => {
-                let a = self.vec_ref(a)?;
-                let b = self.vec_ref(b)?;
+                let a = self.vec_ref(*a)?;
+                let b = self.vec_ref(*b)?;
 
                 if a.len() != b.len() {
                     return Ok(false);
                 }
 
-                for (a, b) in a.iter().copied().zip(b.iter().copied()) {
+                for (a, b) in a.iter().zip(b.iter()) {
                     if !self.value_ptr_eq(a, b)? {
                         return Ok(false);
                     }
@@ -2057,8 +2051,8 @@ impl Vm {
                 true
             }
             (Value::Object(a), Value::Object(b)) => {
-                let a = self.object_ref(a)?;
-                let b = self.object_ref(b)?;
+                let a = self.object_ref(*a)?;
+                let b = self.object_ref(*b)?;
 
                 if a.len() != b.len() {
                     return Ok(false);
@@ -2070,7 +2064,7 @@ impl Vm {
                         None => return Ok(false),
                     };
 
-                    if !self.value_ptr_eq(*a, *b)? {
+                    if !self.value_ptr_eq(a, b)? {
                         return Ok(false);
                     }
                 }
@@ -2078,18 +2072,18 @@ impl Vm {
                 true
             }
             (Value::String(a), Value::String(b)) => {
-                let a = self.string_ref(a)?;
-                let b = self.string_ref(b)?;
+                let a = self.string_ref(*a)?;
+                let b = self.string_ref(*b)?;
                 *a == *b
             }
             (Value::StaticString(a), Value::String(b)) => {
-                let a = self.lookup_string(a)?;
-                let b = self.string_ref(b)?;
+                let a = self.lookup_string(*a)?;
+                let b = self.string_ref(*b)?;
                 a == *b
             }
             (Value::String(a), Value::StaticString(b)) => {
-                let a = self.string_ref(a)?;
-                let b = self.lookup_string(b)?;
+                let a = self.string_ref(*a)?;
+                let b = self.lookup_string(*b)?;
                 *a == b
             }
             // fast string comparison: exact string slot.
@@ -2105,7 +2099,7 @@ impl Vm {
     fn op_eq(&mut self) -> Result<(), VmError> {
         let a = self.stack.pop()?;
         let b = self.stack.pop()?;
-        self.push(Value::Bool(self.value_ptr_eq(a, b)?));
+        self.push(Value::Bool(self.value_ptr_eq(&a, &b)?));
         Ok(())
     }
 
@@ -2114,7 +2108,7 @@ impl Vm {
     fn op_neq(&mut self) -> Result<(), VmError> {
         let b = self.stack.pop()?;
         let a = self.stack.pop()?;
-        self.push(Value::Bool(!self.value_ptr_eq(a, b)?));
+        self.push(Value::Bool(!self.value_ptr_eq(&a, &b)?));
         Ok(())
     }
 
@@ -2269,7 +2263,7 @@ impl Vm {
 
             let value = {
                 let object = self.object_ref(target)?;
-                object.get(index).copied()
+                object.get(index).cloned()
             };
 
             let value = self.option_allocate(value);
@@ -2308,7 +2302,7 @@ impl Vm {
             Value::Vec(slot) => {
                 let vec = self.vec_ref(slot)?;
 
-                match vec.get(index).copied() {
+                match vec.get(index).cloned() {
                     Some(value) => value,
                     None => {
                         return Err(VmError::VecIndexMissing { index });
@@ -2330,10 +2324,10 @@ impl Vm {
     fn op_tuple_index_get(&mut self, index: usize) -> Result<(), VmError> {
         let value = self.stack.pop()?;
 
-        let result = self.on_tuple(value, true, |tuple| {
+        let result = self.on_tuple(&value, true, |tuple| {
             tuple
                 .get(index)
-                .copied()
+                .cloned()
                 .ok_or_else(|| VmError::TupleIndexMissing { index })
         })?;
 
@@ -2359,7 +2353,7 @@ impl Vm {
                 let index = self.lookup_string(string_slot)?;
                 let object = self.object_ref(slot)?;
 
-                match object.get(index).copied() {
+                match object.get(index).cloned() {
                     Some(value) => value,
                     None => {
                         return Err(VmError::ObjectIndexMissing { slot: string_slot });
@@ -2370,7 +2364,7 @@ impl Vm {
                 let index = self.lookup_string(string_slot)?;
                 let typed_object = self.typed_object_ref(slot)?;
 
-                match typed_object.object.get(index).copied() {
+                match typed_object.object.get(index).cloned() {
                     Some(value) => value,
                     None => {
                         return Err(VmError::ObjectIndexMissing { slot: string_slot });
@@ -2670,9 +2664,9 @@ impl Vm {
         let value = self.pop()?;
 
         let result = if exact {
-            self.on_tuple(value, tuple_like, |tuple| tuple.len() == len)?
+            self.on_tuple(&value, tuple_like, |tuple| tuple.len() == len)?
         } else {
-            self.on_tuple(value, tuple_like, |tuple| tuple.len() >= len)?
+            self.on_tuple(&value, tuple_like, |tuple| tuple.len() >= len)?
         };
 
         self.push(Value::Bool(result.unwrap_or_default()));
@@ -2729,12 +2723,19 @@ impl Vm {
     }
 
     #[inline]
-    fn on_tuple<F, O>(&mut self, value: Value, tuple_like: bool, f: F) -> Result<Option<O>, VmError>
+    fn on_tuple<F, O>(
+        &mut self,
+        value: &Value,
+        tuple_like: bool,
+        f: F,
+    ) -> Result<Option<O>, VmError>
     where
         F: FnOnce(&[Value]) -> O,
     {
+        use std::slice;
+
         if let Value::Tuple(slot) = value {
-            return Ok(Some(f(&*self.tuple_ref(slot)?)));
+            return Ok(Some(f(&*self.tuple_ref(*slot)?)));
         }
 
         if !tuple_like {
@@ -2743,23 +2744,23 @@ impl Vm {
 
         Ok(match value {
             Value::Result(slot) => {
-                let result = self.result_ref(slot)?;
+                let result = self.result_ref(*slot)?;
 
                 Some(match &*result {
-                    Ok(ok) => f(&[*ok]),
-                    Err(err) => f(&[*err]),
+                    Ok(ok) => f(slice::from_ref(ok)),
+                    Err(err) => f(slice::from_ref(err)),
                 })
             }
             Value::Option(slot) => {
-                let option = self.option_ref(slot)?;
+                let option = self.option_ref(*slot)?;
 
                 Some(match &*option {
-                    Some(some) => f(&[*some]),
+                    Some(some) => f(slice::from_ref(some)),
                     None => f(&[]),
                 })
             }
             Value::TypedTuple(slot) => {
-                let typed_tuple = self.typed_tuple_ref(slot)?;
+                let typed_tuple = self.typed_tuple_ref(*slot)?;
                 Some(f(&*typed_tuple.tuple))
             }
             _ => None,
@@ -2821,7 +2822,7 @@ impl Vm {
                 }
                 Inst::AddAssign { offset } => {
                     let arg = self.stack.pop()?;
-                    let value = self.stack.at_offset(offset)?;
+                    let value = self.stack.at_offset(offset)?.clone();
                     let value = assign_ops! {
                         self, context, crate::ADD_ASSIGN, +, value.checked_add(arg), Overflow
                     };
@@ -2835,7 +2836,7 @@ impl Vm {
                 }
                 Inst::SubAssign { offset } => {
                     let arg = self.stack.pop()?;
-                    let value = self.stack.at_offset(offset)?;
+                    let value = self.stack.at_offset(offset)?.clone();
                     let value = assign_ops! {
                         self, context, crate::SUB_ASSIGN, -, value.checked_sub(arg), Underflow
                     };
@@ -2848,7 +2849,7 @@ impl Vm {
                 }
                 Inst::MulAssign { offset } => {
                     let arg = self.stack.pop()?;
-                    let value = self.stack.at_offset(offset)?;
+                    let value = self.stack.at_offset(offset)?.clone();
                     let value = assign_ops! {
                         self, context, crate::MUL_ASSIGN, *, value.checked_mul(arg), Overflow
                     };
@@ -2861,7 +2862,7 @@ impl Vm {
                 }
                 Inst::DivAssign { offset } => {
                     let arg = self.stack.pop()?;
-                    let value = self.stack.at_offset(offset)?;
+                    let value = self.stack.at_offset(offset)?.clone();
                     let value = assign_ops! {
                         self, context, crate::DIV_ASSIGN, /, value.checked_div(arg), DivideByZero
                     };
@@ -2873,7 +2874,7 @@ impl Vm {
                     call_fn!(self, hash, args, context, update_ip);
                 }
                 Inst::CallInstance { hash, args } => {
-                    let instance = self.stack.peek()?;
+                    let instance = self.stack.peek()?.clone();
                     let ty = instance.value_type(self)?;
                     let hash = Hash::instance_function(ty, hash);
 

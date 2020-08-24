@@ -744,7 +744,7 @@ macro_rules! impl_register {
     // Expand to function variable bindings.
     (@unsafe-vars $vm:expr, $count:expr, $($ty:ty, $var:ident, $num:expr,)*) => {
         $(
-            let $var = match <$ty>::unsafe_from_value($var, $vm) {
+            let $var = match <$ty>::unsafe_from_value(&$var, $vm) {
                 Ok(v) => v,
                 Err(error) => {
                     let ty = $var.type_info($vm)?;
@@ -762,7 +762,7 @@ macro_rules! impl_register {
 
     // Expand to instance variable bindings.
     (@unsafe-inst-vars $inst:ident, $vm:expr, $count:expr, $($ty:ty, $var:ident, $num:expr,)*) => {
-        let $inst = match Instance::unsafe_from_value($inst, $vm) {
+        let $inst = match Instance::unsafe_from_value(&$inst, $vm) {
             Ok(v) => v,
             Err(error) => {
                 let ty = $inst.type_info($vm)?;
@@ -777,7 +777,7 @@ macro_rules! impl_register {
         };
 
         $(
-            let $var = match <$ty>::unsafe_from_value($var, $vm) {
+            let $var = match <$ty>::unsafe_from_value(&$var, $vm) {
                 Ok(v) => v,
                 Err(error) => {
                     let ty = $var.type_info($vm)?;

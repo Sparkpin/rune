@@ -20,14 +20,14 @@ macro_rules! impl_map {
         where
             T: FromValue,
         {
-            fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+            fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
                 let slot = value.into_vec(vm)?;
                 let object = vm.object_take(slot)?;
 
                 let mut output = $($tt)*::with_capacity(object.len());
 
                 for (key, value) in object {
-                    output.insert(key, T::from_value(value, vm)?);
+                    output.insert(key, T::from_value(&value, vm)?);
                 }
 
                 Ok(output)

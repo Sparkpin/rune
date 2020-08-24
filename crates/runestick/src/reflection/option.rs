@@ -48,13 +48,13 @@ impl<T> FromValue for Option<T>
 where
     T: FromValue,
 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
             Value::Option(slot) => {
-                let option = vm.option_take(slot)?;
+                let option = vm.option_take(*slot)?;
 
                 Ok(match option {
-                    Some(some) => Some(T::from_value(some, vm)?),
+                    Some(some) => Some(T::from_value(&some, vm)?),
                     None => None,
                 })
             }
@@ -70,7 +70,7 @@ impl<'a> UnsafeFromValue for &'a Option<Value> {
     type Guard = RawRefGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_option(vm)?;

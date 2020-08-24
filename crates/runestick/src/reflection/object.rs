@@ -43,13 +43,13 @@ impl<T> FromValue for Object<T>
 where
     T: FromValue,
 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         let slot = value.into_object(vm)?;
         let value = vm.object_take(slot)?;
         let mut object = Object::with_capacity(value.len());
 
         for (key, value) in value {
-            object.insert(key, T::from_value(value, vm)?);
+            object.insert(key, T::from_value(&value, vm)?);
         }
 
         Ok(object)
@@ -61,7 +61,7 @@ impl<'a> UnsafeFromValue for &'a Object<Value> {
     type Guard = RawRefGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_object(vm)?;

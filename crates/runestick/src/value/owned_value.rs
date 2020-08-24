@@ -55,9 +55,9 @@ pub enum OwnedValue {
     /// A future in the virtual machine.
     Future(Future),
     /// An optional value.
-    Option(Option<Box<OwnedValue>>),
+    Option(Box<Option<OwnedValue>>),
     /// A result value.
-    Result(Result<Box<OwnedValue>, Box<OwnedValue>>),
+    Result(Box<Result<OwnedValue, OwnedValue>>),
     /// A typed object.
     TypedObject(OwnedTypedObject),
     /// A typed tuple.

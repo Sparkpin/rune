@@ -23,7 +23,7 @@ impl ToValue for () {
 }
 
 impl FromValue for () {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
             Value::Unit => Ok(()),
             actual => Err(VmError::ExpectedUnit {
@@ -47,7 +47,7 @@ macro_rules! impl_from_value_tuple {
         where
             $($ty: FromValue,)*
         {
-            fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+            fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
                 let slot = value.into_tuple(vm)?;
                 let tuple = vm.tuple_clone(slot)?;
 
@@ -63,7 +63,7 @@ macro_rules! impl_from_value_tuple {
 
                 $(
                     let $var: $ty = match it.next() {
-                        Some(value) => <$ty>::from_value(*value, vm)?,
+                        Some(value) => <$ty>::from_value(value, vm)?,
                         None => {
                             return Err(VmError::IterationError);
                         },

@@ -13,7 +13,7 @@ macro_rules! decl_external {
 
         impl $crate::FromValue for $external {
             fn from_value(
-                value: $crate::Value,
+                value: &$crate::Value,
                 vm: &mut $crate::Vm,
             ) -> Result<Self, $crate::VmError> {
                 let slot = value.into_external(vm)?;
@@ -92,7 +92,7 @@ macro_rules! decl_internal {
             type Guard = $crate::RawRefGuard;
 
             unsafe fn unsafe_from_value(
-                value: $crate::Value,
+                value: &$crate::Value,
                 vm: &mut $crate::Vm,
             ) -> Result<(Self::Output, Self::Guard), $crate::VmError> {
                 let slot = value.into_external(vm)?;
@@ -111,7 +111,7 @@ macro_rules! decl_internal {
             type Guard = $crate::RawMutGuard;
 
             unsafe fn unsafe_from_value(
-                value: $crate::Value,
+                value: &$crate::Value,
                 vm: &mut $crate::Vm,
             ) -> Result<(Self::Output, Self::Guard), $crate::VmError> {
                 let slot = value.into_external(vm)?;

@@ -66,14 +66,14 @@ where
     T: FromValue,
     E: FromValue,
 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
             Value::Result(slot) => {
-                let result = vm.result_take(slot)?;
+                let result = vm.result_take(*slot)?;
 
                 Ok(match result {
-                    Ok(ok) => Ok(T::from_value(ok, vm)?),
-                    Err(err) => Err(E::from_value(err, vm)?),
+                    Ok(ok) => Ok(T::from_value(&ok, vm)?),
+                    Err(err) => Err(E::from_value(&err, vm)?),
                 })
             }
             actual => Err(VmError::ExpectedOption {
@@ -88,7 +88,7 @@ impl<'a> UnsafeFromValue for &'a Result<Value, Value> {
     type Guard = RawRefGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_result(vm)?;

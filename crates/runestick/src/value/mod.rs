@@ -44,7 +44,7 @@ pub struct TypedObject {
 }
 
 /// An entry on the stack.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// The unit value.
     Unit,
@@ -90,28 +90,28 @@ pub enum Value {
 impl Value {
     /// Convert into a slot if it's stored in a slot.
     #[inline]
-    pub fn into_slot(self) -> Option<Slot> {
+    pub fn into_slot(&self) -> Option<Slot> {
         match self {
-            Self::String(slot) => Some(slot),
-            Self::Bytes(slot) => Some(slot),
-            Self::Vec(slot) => Some(slot),
-            Self::Tuple(slot) => Some(slot),
-            Self::Object(slot) => Some(slot),
-            Self::External(slot) => Some(slot),
-            Self::Future(slot) => Some(slot),
-            Self::Option(slot) => Some(slot),
-            Self::Result(slot) => Some(slot),
-            Self::TypedTuple(slot) => Some(slot),
-            Self::TypedObject(slot) => Some(slot),
+            Self::String(slot) => Some(*slot),
+            Self::Bytes(slot) => Some(*slot),
+            Self::Vec(slot) => Some(*slot),
+            Self::Tuple(slot) => Some(*slot),
+            Self::Object(slot) => Some(*slot),
+            Self::External(slot) => Some(*slot),
+            Self::Future(slot) => Some(*slot),
+            Self::Option(slot) => Some(*slot),
+            Self::Result(slot) => Some(*slot),
+            Self::TypedTuple(slot) => Some(*slot),
+            Self::TypedObject(slot) => Some(*slot),
             _ => None,
         }
     }
 
     /// Try to coerce value reference into a result.
     #[inline]
-    pub fn into_result(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_result(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::Result(slot) => Ok(slot),
+            Self::Result(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedResult {
                 actual: actual.type_info(vm)?,
             }),
@@ -120,9 +120,9 @@ impl Value {
 
     /// Try to coerce value reference into an option.
     #[inline]
-    pub fn into_option(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_option(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::Option(slot) => Ok(slot),
+            Self::Option(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedOption {
                 actual: actual.type_info(vm)?,
             }),
@@ -131,9 +131,9 @@ impl Value {
 
     /// Try to coerce value reference into a string.
     #[inline]
-    pub fn into_string(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_string(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::String(slot) => Ok(slot),
+            Self::String(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedString {
                 actual: actual.type_info(vm)?,
             }),
@@ -142,9 +142,9 @@ impl Value {
 
     /// Try to coerce value reference into bytes.
     #[inline]
-    pub fn into_bytes(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_bytes(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::Bytes(slot) => Ok(slot),
+            Self::Bytes(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedBytes {
                 actual: actual.type_info(vm)?,
             }),
@@ -153,9 +153,9 @@ impl Value {
 
     /// Try to coerce value reference into a vector.
     #[inline]
-    pub fn into_vec(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_vec(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::Vec(slot) => Ok(slot),
+            Self::Vec(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedVec {
                 actual: actual.type_info(vm)?,
             }),
@@ -164,9 +164,9 @@ impl Value {
 
     /// Try to coerce value reference into a tuple.
     #[inline]
-    pub fn into_tuple(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_tuple(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::Tuple(slot) => Ok(slot),
+            Self::Tuple(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedTuple {
                 actual: actual.type_info(vm)?,
             }),
@@ -175,9 +175,9 @@ impl Value {
 
     /// Try to coerce value reference into an object.
     #[inline]
-    pub fn into_object(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_object(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::Object(slot) => Ok(slot),
+            Self::Object(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedObject {
                 actual: actual.type_info(vm)?,
             }),
@@ -186,9 +186,9 @@ impl Value {
 
     /// Try to coerce value reference into an external.
     #[inline]
-    pub fn into_external(self, vm: &Vm) -> Result<Slot, VmError> {
+    pub fn into_external(&self, vm: &Vm) -> Result<Slot, VmError> {
         match self {
-            Self::External(slot) => Ok(slot),
+            Self::External(slot) => Ok(*slot),
             actual => Err(VmError::ExpectedExternal {
                 actual: actual.type_info(vm)?,
             }),

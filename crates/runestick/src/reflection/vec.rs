@@ -43,14 +43,14 @@ impl<T> FromValue for Vec<T>
 where
     T: FromValue,
 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         let slot = value.into_vec(vm)?;
         let vec = vm.vec_take(slot)?;
 
         let mut output = Vec::with_capacity(vec.len());
 
         for value in vec {
-            output.push(T::from_value(value, vm)?);
+            output.push(T::from_value(&value, vm)?);
         }
 
         Ok(output)
@@ -62,7 +62,7 @@ impl<'a> UnsafeFromValue for &'a Vec<Value> {
     type Guard = RawRefGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_vec(vm)?;
@@ -79,7 +79,7 @@ impl<'a> UnsafeFromValue for &'a mut Vec<Value> {
     type Guard = RawMutGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_vec(vm)?;

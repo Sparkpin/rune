@@ -60,7 +60,7 @@ pub trait UnsafeToValue {
 /// Trait for converting from a value.
 pub trait FromValue: Sized {
     /// Try to convert to the given type, from the given value.
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError>;
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError>;
 }
 
 /// A potentially unsafe conversion for value conversion.
@@ -84,7 +84,7 @@ pub trait UnsafeFromValue: Sized {
     /// You must also make sure that the returned value does not outlive the
     /// guard.
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError>;
 
@@ -107,7 +107,10 @@ where
     type Output = T;
     type Guard = ();
 
-    unsafe fn unsafe_from_value(value: Value, vm: &mut Vm) -> Result<(Self, Self::Guard), VmError> {
+    unsafe fn unsafe_from_value(
+        value: &Value,
+        vm: &mut Vm,
+    ) -> Result<(Self, Self::Guard), VmError> {
         Ok((T::from_value(value, vm)?, ()))
     }
 
@@ -126,8 +129,8 @@ where
 }
 
 impl FromValue for Value {
-    fn from_value(value: Value, _: &mut Vm) -> Result<Self, VmError> {
-        Ok(value)
+    fn from_value(value: &Value, _: &mut Vm) -> Result<Self, VmError> {
+        Ok(value.clone())
     }
 }
 
@@ -138,13 +141,13 @@ impl ToValue for Value {
 }
 
 impl FromValue for OwnedValue {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         vm.value_take(value)
     }
 }
 
 impl FromValue for Any {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         let slot = value.into_external(vm)?;
         vm.slot_take_dyn(slot)
     }
@@ -215,7 +218,7 @@ macro_rules! impl_from_value_tuple_vec {
         where
             $($ty: FromValue,)*
         {
-            fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+            fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
                 let slot = value.into_vec(vm)?;
                 let tuple = vm.vec_clone(slot)?;
 
@@ -231,7 +234,7 @@ macro_rules! impl_from_value_tuple_vec {
 
                 $(
                     let $var: $ty = match it.next() {
-                        Some(value) => <$ty>::from_value(*value, vm)?,
+                        Some(value) => <$ty>::from_value(value, vm)?,
                         None => {
                             return Err(VmError::IterationError);
                         },

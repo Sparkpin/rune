@@ -23,9 +23,9 @@ impl ToValue for bool {
 }
 
 impl FromValue for bool {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
-            Value::Bool(value) => Ok(value),
+            Value::Bool(value) => Ok(*value),
             actual => Err(VmError::ExpectedBoolean {
                 actual: actual.type_info(vm)?,
             }),
@@ -52,9 +52,9 @@ impl ToValue for char {
 }
 
 impl FromValue for char {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
-            Value::Char(value) => Ok(value),
+            Value::Char(value) => Ok(*value),
             actual => Err(VmError::ExpectedChar {
                 actual: actual.type_info(vm)?,
             }),
@@ -81,9 +81,9 @@ impl ToValue for u8 {
 }
 
 impl FromValue for u8 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
-            Value::Byte(value) => Ok(value),
+            Value::Byte(value) => Ok(*value),
             actual => Err(VmError::ExpectedByte {
                 actual: actual.type_info(vm)?,
             }),
@@ -121,14 +121,14 @@ macro_rules! number_value_trait {
         }
 
         impl FromValue for $ty {
-            fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+            fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
                 use std::convert::TryInto as _;
 
                 match value {
-                    Value::Integer(number) => match number.try_into() {
+                    Value::Integer(number) => match (*number).try_into() {
                         Ok(number) => Ok(number),
                         Err(..) => Err(VmError::ValueToIntegerCoercionError {
-                            from: Integer::I64(number),
+                            from: Integer::I64(*number),
                             to: std::any::type_name::<Self>(),
                         }),
                     },
@@ -171,9 +171,9 @@ impl ToValue for f64 {
 }
 
 impl FromValue for f64 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
-            Value::Float(number) => Ok(number),
+            Value::Float(number) => Ok(*number),
             actual => Err(VmError::ExpectedFloat {
                 actual: actual.type_info(vm)?,
             }),
@@ -201,9 +201,9 @@ impl ToValue for f32 {
 }
 
 impl FromValue for f32 {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         match value {
-            Value::Float(number) => Ok(number as f32),
+            Value::Float(number) => Ok(*number as f32),
             actual => Err(VmError::ExpectedFloat {
                 actual: actual.type_info(vm)?,
             }),

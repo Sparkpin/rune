@@ -59,7 +59,7 @@ impl<'a> UnsafeToValue for &'a mut Bytes {
 }
 
 impl FromValue for Bytes {
-    fn from_value(value: Value, vm: &mut Vm) -> Result<Self, VmError> {
+    fn from_value(value: &Value, vm: &mut Vm) -> Result<Self, VmError> {
         let slot = value.into_bytes(vm)?;
         vm.bytes_take(slot)
     }
@@ -70,7 +70,7 @@ impl<'a> UnsafeFromValue for &'a Bytes {
     type Guard = RawRefGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_bytes(vm)?;
@@ -87,7 +87,7 @@ impl<'a> UnsafeFromValue for &'a mut Bytes {
     type Guard = RawMutGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_bytes(vm)?;
@@ -104,7 +104,7 @@ impl<'a> UnsafeFromValue for &'a [u8] {
     type Guard = RawRefGuard;
 
     unsafe fn unsafe_from_value(
-        value: Value,
+        value: &Value,
         vm: &mut Vm,
     ) -> Result<(Self::Output, Self::Guard), VmError> {
         let slot = value.into_bytes(vm)?;
